@@ -1,24 +1,15 @@
-# build artifacts
-bin/
-obj/
+**/bin
+**/obj
+**/node_modules
 
-# git
-.git/
+# cache
+.git
 .gitignore
 
-# logs
-*.log
-
-# node
-**/node_modules/
-
-# runtime data (OK)
-api/public
-api/storage
-
-# opcjonalne serwisy (ale NIE jeśli są potrzebne do builda!)
-# AssetValidationService
-# game-server
-# economy-chat
-# deployment
-# 2021-roblox
+# NIE IGNORUJ tego (ważne!)
+!api/
+!services/
+!Roblox/
+!start.sh
+!Dockerfile
+!railway.json

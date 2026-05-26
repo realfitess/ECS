@@ -1,10 +1,12 @@
-# ---------- BUILD ----------
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS dotnet-build
+# ---------- BUILD STAGE ----------
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 
 WORKDIR /src
 
+# kopiujemy cały projekt (ważne: NIE psuje /api /services)
 COPY . .
 
+# restore + publish
 RUN dotnet restore services/Roblox/Roblox.Website/Roblox.Website.csproj
 
 RUN dotnet publish services/Roblox/Roblox.Website/Roblox.Website.csproj \
@@ -13,8 +15,8 @@ RUN dotnet publish services/Roblox/Roblox.Website/Roblox.Website.csproj \
     --no-restore
 
 
-# ---------- NODE (jeśli API istnieje) ----------
-FROM node:18 AS node-build
+# ---------- NODE STAGE (opcjonalne API) ----------
+FROM node:18 AS node
 
 WORKDIR /app/api
 
@@ -25,17 +27,17 @@ RUN if [ -f package.json ]; then npm install; else echo "No node app"; fi
 COPY api ./
 
 # ---------- RUNTIME ----------
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+FROM mcr.microsoft.com/dotnet/aspnet:6.0
 
 WORKDIR /app
 
-# app
-COPY --from=dotnet-build /app/publish ./website
+# backend
+COPY --from=build /app/publish ./website
 
-# node api (optional)
-COPY --from=node-build /app/api ./api || true
+# api (jeśli istnieje)
+COPY --from=node /app/api ./api || true
 
-# folders
+# foldery runtime (ważne dla Twoich static files)
 RUN mkdir -p \
     /app/api/public/images/thumbnails \
     /app/api/public/images/groups

@@ -2,40 +2,14 @@
 
 set -e
 
-echo "[ECS] Booting system..."
+echo "[ECS] Starting Roblox.Website..."
 
-# =========================
-# FIX .NET CRASH (missing folder)
-# =========================
+# FIX crash DirectoryNotFoundException
 mkdir -p /app/api/public/images/thumbnails
 
-# =========================
-# NODE START
-# =========================
-echo "[ECS] Starting Node..."
-
-if [ -f "/app/api/dist/index.js" ]; then
-    node /app/api/dist/index.js &
-    echo "[ECS] Node: dist/index.js"
-
-elif [ -f "/app/api/index.js" ]; then
-    node /app/api/index.js &
-    echo "[ECS] Node: index.js"
-
-elif [ -f "/app/api/server.js" ]; then
-    node /app/api/server.js &
-    echo "[ECS] Node: server.js"
-
-else
-    echo "[ECS] Node entrypoint NOT FOUND"
-    find /app/api -maxdepth 3 -type f -name "*.js"
-fi
-
-# =========================
-# .NET START
-# =========================
-echo "[ECS] Starting ASP.NET..."
-
+# move to .NET app
 cd /app/website
+
+echo "[ECS] Launching .NET service..."
 
 exec dotnet Roblox.Website.dll --urls "http://0.0.0.0:5000"

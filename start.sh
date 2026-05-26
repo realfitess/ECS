@@ -2,8 +2,10 @@
 
 echo "[ECS] Starting Roblox.Website..."
 
-# NIE robimy cd /website, bo go nie ma
-cd /app
+cd /app/website || {
+  echo "ERROR: /app/website not found"
+  ls -la /app
+  exit 1
+}
 
-# uruchomienie aplikacji
 exec dotnet Roblox.Website.dll

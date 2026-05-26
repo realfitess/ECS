@@ -1,14 +1,10 @@
-# =========================
-# BUILD STAGE
-# =========================
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+# ---------- BUILD ----------
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS dotnet-build
 
 WORKDIR /src
 
-# kopiujemy całe repo (monorepo fix)
 COPY . .
 
-# restore + publish
 RUN dotnet restore services/Roblox/Roblox.Website/Roblox.Website.csproj
 
 RUN dotnet publish services/Roblox/Roblox.Website/Roblox.Website.csproj \
@@ -17,20 +13,37 @@ RUN dotnet publish services/Roblox/Roblox.Website/Roblox.Website.csproj \
     --no-restore
 
 
-# =========================
-# RUNTIME STAGE
-# =========================
+# ---------- NODE (jeśli API istnieje) ----------
+FROM node:18 AS node-build
+
+WORKDIR /app/api
+
+COPY api/package*.json ./
+
+RUN if [ -f package.json ]; then npm install; else echo "No node app"; fi
+
+COPY api ./
+
+# ---------- RUNTIME ----------
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 
 WORKDIR /app
 
-# aplikacja trafia bezpośrednio do /app (NIE /website)
-COPY --from=build /app/publish .
+# app
+COPY --from=dotnet-build /app/publish ./website
+
+# node api (optional)
+COPY --from=node-build /app/api ./api || true
+
+# folders
+RUN mkdir -p \
+    /app/api/public/images/thumbnails \
+    /app/api/public/images/groups
 
 # start script
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
-EXPOSE 80
+EXPOSE 8080
 
-ENTRYPOINT ["/app/start.sh"]
+CMD ["/app/start.sh"]

@@ -1,14 +1,13 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http.Json;
+using Roblox.Rendering;
+using Roblox.Website.Middleware;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Net.Http.Headers;
-
 using Roblox;
-using Roblox.Rendering;
-using Roblox.Website.Middleware;
 using Roblox.Services;
 using Roblox.Services.App.FeatureFlags;
 using Roblox.Website.Hubs;
@@ -17,122 +16,117 @@ using Roblox.Website.WebsiteModels;
 var domain = AppDomain.CurrentDomain;
 domain.SetData("REGEX_DEFAULT_MATCH_TIMEOUT", TimeSpan.FromSeconds(5));
 
-IConfiguration configuration = new ConfigurationBuilder()
-    .AddJsonFile("appsettings.json")
-    .Build();
-
 var builder = WebApplication.CreateBuilder(args);
 
-// ================= DB / CACHE =================
-Roblox.Services.Database.Configure(configuration.GetSection("Postgres").Value);
-Roblox.Services.Cache.Configure(configuration.GetSection("Redis").Value);
-
-// ================= CONFIG =================
-Roblox.Configuration.CdnBaseUrl = configuration.GetSection("CdnBaseUrl").Value;
-Roblox.Configuration.AssetDirectory = configuration.GetSection("Directories:Asset").Value;
-Roblox.Configuration.StorageDirectory = configuration.GetSection("Directories:Storage").Value;
-Roblox.Configuration.ThumbnailsDirectory = configuration.GetSection("Directories:Thumbnails").Value;
-Roblox.Configuration.GroupIconsDirectory = configuration.GetSection("Directories:GroupIcons").Value;
-Roblox.Configuration.PublicDirectory = configuration.GetSection("Directories:Public").Value;
-
-Roblox.Configuration.BaseUrl = configuration.GetSection("BaseUrl").Value;
-Roblox.Configuration.HCaptchaPublicKey = configuration.GetSection("HCaptcha:Public").Value;
-Roblox.Configuration.HCaptchaPrivateKey = configuration.GetSection("HCaptcha:Private").Value;
-
-// game servers
-IConfiguration gameServerConfig = new ConfigurationBuilder()
-    .AddJsonFile("game-servers.json")
+IConfiguration configuration = new ConfigurationBuilder()
+    .AddJsonFile("appsettings.json", optional: true)
     .Build();
 
-Roblox.Configuration.GameServerIpAddresses =
-    gameServerConfig.GetSection("GameServers").Get<IEnumerable<GameServerConfigEntry>>();
+// =========================
+// SAFE CONFIG (NO CRASH)
+// =========================
+static string Safe(IConfiguration cfg, string key)
+    => cfg.GetSection(key).Value ?? "";
 
-// ================= SERVICES =================
+// DB
+Roblox.Services.Database.Configure(Safe(configuration, "Postgres"));
+Roblox.Services.Cache.Configure(Safe(configuration, "Redis"));
+
+// CONFIG SAFETY
+Roblox.Configuration.CdnBaseUrl = Safe(configuration, "CdnBaseUrl");
+Roblox.Configuration.AssetDirectory = Safe(configuration, "Directories:Asset");
+Roblox.Configuration.StorageDirectory = Safe(configuration, "Directories:Storage");
+Roblox.Configuration.ThumbnailsDirectory = Safe(configuration, "Directories:Thumbnails");
+Roblox.Configuration.GroupIconsDirectory = Safe(configuration, "Directories:GroupIcons");
+Roblox.Configuration.PublicDirectory = Safe(configuration, "Directories:Public");
+Roblox.Configuration.XmlTemplatesDirectory = Safe(configuration, "Directories:XmlTemplates");
+Roblox.Configuration.JsonDataDirectory = Safe(configuration, "Directories:JsonData");
+
+Roblox.Configuration.BaseUrl = Safe(configuration, "BaseUrl");
+
+// =========================
+// FIX: CREATE MISSING DIRS
+// =========================
+void EnsureDir(string path)
+{
+    if (!string.IsNullOrWhiteSpace(path))
+        Directory.CreateDirectory(path);
+}
+
+EnsureDir(Roblox.Configuration.ThumbnailsDirectory);
+EnsureDir(Roblox.Configuration.GroupIconsDirectory);
+EnsureDir(Roblox.Configuration.PublicDirectory + "UnsecuredContent");
+EnsureDir("/app/api/public/images/thumbnails");
+
+// =========================
+// SERVICES
+// =========================
 builder.Services.AddRazorPages();
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     o.JsonSerializerOptions.PropertyNamingPolicy = null;
 });
-
 builder.Services.AddSignalR();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// ================= APP =================
 var app = builder.Build();
 
 app.UseRouting();
 
-// ================= STATIC FILES =================
-var cache = new StaticFileResponseContext(ctx =>
+var cacheHeaders = (StaticFileResponseContext ctx) =>
 {
-    ctx.Context.Response.Headers[HeaderNames.CacheControl] = "public,max-age=31536000";
-});
+    ctx.Context.Response.Headers[HeaderNames.CacheControl] = "public,max-age=86400";
+};
 
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(Roblox.Configuration.PublicDirectory + "UnsecuredContent"),
-    RequestPath = "/UnsecuredContent"
-});
-
-if (string.IsNullOrWhiteSpace(Roblox.Configuration.CdnBaseUrl))
+// =========================
+// STATIC FILES SAFE MODE
+// =========================
+if (Directory.Exists(Roblox.Configuration.ThumbnailsDirectory))
 {
     app.UseStaticFiles(new StaticFileOptions
     {
         FileProvider = new PhysicalFileProvider(Roblox.Configuration.ThumbnailsDirectory),
-        RequestPath = "/images/thumbnails"
-    });
-
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = new PhysicalFileProvider(Roblox.Configuration.GroupIconsDirectory),
-        RequestPath = "/images/groups"
+        RequestPath = "/images/thumbnails",
+        OnPrepareResponse = cacheHeaders,
     });
 }
 
-// ================= MIDDLEWARE =================
+if (Directory.Exists(Roblox.Configuration.GroupIconsDirectory))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(Roblox.Configuration.GroupIconsDirectory),
+        RequestPath = "/images/groups",
+        OnPrepareResponse = cacheHeaders,
+    });
+}
+
+app.UseStaticFiles();
+
+app.UseSwagger();
+app.UseSwaggerUI();
+
 app.UseRobloxSessionMiddleware();
 app.UseRobloxPlayerCorsMiddleware();
 app.UseRobloxCsrfMiddleware();
 app.UseApplicationGuardMiddleware();
-
-Roblox.Website.Middleware.ApplicationGuardMiddleware.Configure(
-    configuration.GetSection("Authorization").Value);
-
-Roblox.Website.Middleware.CsrfMiddleware.Configure(Guid.NewGuid().ToString());
-
-app.UseSwagger();
-app.UseSwaggerUI();
 
 app.UseMiddleware<FrontendProxyMiddleware>();
 app.UseRobloxLoggingMiddleware();
 
 app.UseExceptionHandler("/error");
 
-// ================= SERVICES INIT =================
-CommandHandler.Configure(
-    configuration.GetSection("Render:BaseUrl").Value,
-    configuration.GetSection("Render:Authorization").Value);
-
-SessionMiddleware.Configure(configuration.GetSection("Jwt:Sessions").Value);
-
+SessionMiddleware.Configure(Safe(configuration, "Jwt:Sessions"));
 app.UseTimerMiddleware();
 
-// ================= BACKGROUND TASK =================
-Task.Run(async () =>
+app.UseEndpoints(e =>
 {
-    await Task.Delay(5000);
-    using var assets = Roblox.Services.ServiceProvider.GetOrCreate<AssetsService>();
-    await assets.FixAssetImagesWithoutMetadata();
-});
-
-// ================= ENDPOINTS =================
-app.UseEndpoints(endpoints =>
-{
-    endpoints.MapHub<ChatHub>("/chat");
-    endpoints.MapControllers();
-    endpoints.MapRazorPages();
+    e.MapHub<ChatHub>("/chat");
+    e.MapControllers();
+    e.MapRazorPages();
 });
 
 app.Run();

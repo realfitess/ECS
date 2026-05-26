@@ -32,4 +32,16 @@ COPY api ./
 FROM mcr.microsoft.com/dotnet/aspnet:6.0
 WORKDIR /app
 
-# .NET
+# .NET app
+COPY --from=build /app/publish ./
+
+# Node API (jeśli istnieje)
+COPY --from=node /app/api ./api || true
+
+# start script
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+EXPOSE 80
+
+ENTRYPOINT ["/app/start.sh"]

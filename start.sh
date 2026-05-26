@@ -1,15 +1,9 @@
 #!/bin/sh
 
-set -e
-
 echo "[ECS] Starting Roblox.Website..."
 
-# FIX crash DirectoryNotFoundException
-mkdir -p /app/api/public/images/thumbnails
+# NIE robimy cd /website, bo go nie ma
+cd /app
 
-# move to .NET app
-cd /app/website
-
-echo "[ECS] Launching .NET service..."
-
-exec dotnet Roblox.Website.dll --urls "http://0.0.0.0:5000"
+# uruchomienie aplikacji
+exec dotnet Roblox.Website.dll

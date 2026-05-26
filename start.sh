@@ -2,6 +2,10 @@
 
 echo "[ECS] Starting Roblox.Website..."
 
-cd /app || exit 1
+# NIE CRASHUJ jeśli folder nie istnieje
+if [ -d "/app/website" ]; then
+  cd /app/website
+fi
 
+# uruchom .NET
 exec dotnet Roblox.Website.dll

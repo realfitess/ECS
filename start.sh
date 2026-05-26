@@ -1,12 +1,24 @@
-#!/bin/bash
+#!/bin/sh
 
-# Start Redis
-redis-server --daemonize yes
+echo "[ECS] Starting container..."
 
-# Start API
-cd /app/api
-node index.js &
+# FIX .NET crash (thumbnails)
+mkdir -p /app/api/public/images/thumbnails/
 
-# Start website
+# ===== NODE START (ECS SAFE FIX) =====
+echo "[ECS] Starting Node..."
+
+if [ -f "/app/api/index.js" ]; then
+    node /app/api/index.js &
+elif [ -f "/app/api/dist/index.js" ]; then
+    node /app/api/dist/index.js &
+else
+    echo "[ECS] ERROR: Cannot find Node entry"
+    ls -R /app/api
+fi
+
+# ===== .NET START =====
+echo "[ECS] Starting ASP.NET..."
+
 cd /app/website
-dotnet Roblox.Website.dll --urls "http://0.0.0.0:5000"
+exec dotnet Roblox.Website.dll --urls "http://0.0.0.0:5000"

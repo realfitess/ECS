@@ -1,11 +1,14 @@
+# =========================
+# BUILD STAGE
+# =========================
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
 WORKDIR /src
 
-# kopiujemy CAŁE repo (kluczowe)
+# kopiujemy całe repo (monorepo fix)
 COPY . .
 
-# wybieramy główny projekt
+# restore + publish
 RUN dotnet restore services/Roblox/Roblox.Website/Roblox.Website.csproj
 
 RUN dotnet publish services/Roblox/Roblox.Website/Roblox.Website.csproj \
@@ -14,18 +17,20 @@ RUN dotnet publish services/Roblox/Roblox.Website/Roblox.Website.csproj \
     --no-restore
 
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+# =========================
+# RUNTIME STAGE
+# =========================
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
 
 WORKDIR /app
 
+# aplikacja trafia bezpośrednio do /app (NIE /website)
 COPY --from=build /app/publish .
 
-# statyczne rzeczy jeśli istnieją
-RUN mkdir -p /app/static || true
-
+# start script
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
 EXPOSE 80
 
-ENTRYPOINT ["./start.sh"]
+ENTRYPOINT ["/app/start.sh"]

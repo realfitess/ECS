@@ -1,34 +1,21 @@
 # =========================
 # BUILD .NET
 # =========================
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS dotnet-build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
 WORKDIR /src
 
-# kopiujemy wszystko (najbezpieczniejsze przy monorepo)
+# kopiujemy CAŁE repo (ważne w Twoim przypadku)
 COPY . .
 
+# restore
 RUN dotnet restore services/Roblox/Roblox.Website/Roblox.Website.csproj
 
+# publish
 RUN dotnet publish services/Roblox/Roblox.Website/Roblox.Website.csproj \
     -c Release \
     -o /app/publish \
     --no-restore
-
-
-# =========================
-# NODE (opcjonalnie frontend)
-# =========================
-FROM node:18 AS node-build
-
-WORKDIR /app/api
-
-# NIE wywalaj builda jak nie ma api
-COPY api/package*.json . 2>/dev/null || true
-RUN if [ -f package.json ]; then npm install; else echo "No Node API"; fi
-
-COPY api . 2>/dev/null || true
-RUN if [ -f package.json ]; then npm run build; fi
 
 
 # =========================
@@ -38,13 +25,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0
 
 WORKDIR /app
 
-COPY --from=dotnet-build /app/publish ./website
+COPY --from=build /app/publish .
 
-# node output (jeśli istnieje)
-COPY --from=node-build /app/api ./api 2>/dev/null || true
-
-RUN mkdir -p /app/api/public/images/thumbnails /app/api/public/images/groups
-
+# jeśli masz start.sh
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 

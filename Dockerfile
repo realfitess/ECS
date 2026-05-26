@@ -1,26 +1,47 @@
+# =========================
+# 1. BUILD .NET (SDK stage)
+# =========================
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS dotnet-build
-
 WORKDIR /src
 
-COPY services/Roblox/Roblox.Website ./Roblox.Website
+# 🔥 KLUCZ FIX: kopiujemy CAŁE repo (nie /website, nie /api)
+COPY . .
 
-RUN dotnet restore Roblox.Website/Roblox.Website.csproj
+# restore całego projektu (ważne przy multi-project solution)
+RUN dotnet restore services/Roblox/Roblox.Website/Roblox.Website.csproj
 
-RUN dotnet publish Roblox.Website/Roblox.Website.csproj \
+# publish main website
+RUN dotnet publish services/Roblox/Roblox.Website/Roblox.Website.csproj \
     -c Release \
-    -o /app/publish
+    -o /app/publish \
+    --no-restore
 
+# =========================
+# 2. NODE BUILD (API)
+# =========================
+FROM node:18 AS node-build
+WORKDIR /app/api
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+# instalacja zależności
+COPY api/package*.json ./
+RUN npm install
 
+# kopiowanie API
+COPY api ./
+
+# =========================
+# 3. RUNTIME (final image)
+# =========================
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# ✔ FIXED COPY (2 ARGUMENTS!)
+# .NET app
 COPY --from=dotnet-build /app/publish ./website
 
-RUN mkdir -p /app/api/public/images/thumbnails
+# Node API
+COPY --from=node-build /app/api ./api
 
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
-
-CMD ["/app/start.sh"]
+# =========================
+# FIX TWOICH BŁĘDÓW (DIRECTORIES)
+# =========================
+RUN mkdir -p
